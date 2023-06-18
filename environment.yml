@@ -1,0 +1,23 @@
+name: streamlit_heatmap_deploy
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - networkx
+  - osmnx
+  - pandas
+  - folium
+  - branca
+  - matplotlib
+  - gspread
+  - psycopg2
+  - oauth2client
+  - google-api-python-client
+  - pip
+  - pip:
+    - streamlit
+    - streamlit-folium
+    - gspread-dataframe
+    - gpt-heat-routes
