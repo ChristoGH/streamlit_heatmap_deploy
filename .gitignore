@@ -10,8 +10,9 @@ output/
 Route_Heatmap/
 SL_Access/
 Road_Graphs/
+heatmap_venv/
 
-poc-knowledge-graph-venv/bin/
+ipoc-knowledge-graph-venv/bin/
 poc-knowledge-graph-venv/etc/
 poc-knowledge-graph-venv/include/
 poc-knowledge-graph-venv/share/
