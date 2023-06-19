@@ -1,13 +1,13 @@
 import logging
 from pathlib import Path
 
-# log_file_path = Path("data/function_timings.log")
-log_file_path = Path.cwd() / "data" / "function_timings.log"
-# os.makedirs(log_file_path.parent, exist_ok=True)
-log_file_path.parent.mkdir(parents=True, exist_ok=True)
+# # log_file_path = Path("data/function_timings.log")
+# log_file_path = Path.cwd() / "data" / "function_timings.log"
+# # os.makedirs(log_file_path.parent, exist_ok=True)
+# log_file_path.parent.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
-    filename=log_file_path,
+    # filename=log_file_path,
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
