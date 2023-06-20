@@ -76,7 +76,7 @@ Thumbs.db
 
 # data files
 *.csv
-*.txt
+# *.txt
 *.pkl
 
 .ipynb_checkpoints
