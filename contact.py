@@ -4,6 +4,51 @@ from googleapiclient.http import MediaIoBaseDownload
 import streamlit as st
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
+import streamlit_authenticator as stauth
+def attrdict_to_dict(attrdict):
+    dict_ = {}
+    for key, value in attrdict.items():
+        if isinstance(value, attrdict.__class__):
+            dict_[key] = attrdict_to_dict(value)
+        else:
+            dict_[key] = value
+    return dict_
+# Step 1: Set up authentication
+hashed_passwords = stauth.Hasher(['john@lovejustice.ngo']).generate()
+
+import yaml
+from yaml.loader import SafeLoader
+with open('config.yaml') as file:
+    yml_config = yaml.load(file, Loader=SafeLoader)
+
+authenticator = stauth.Authenticate(
+    yml_config['credentials'],
+    yml_config['cookie']['name'],
+    yml_config['cookie']['key'],
+    yml_config['cookie']['expiry_days'],
+    yml_config['preauthorized']
+)
+
+toml_config = st.secrets["auth"]
+toml_config_dict = attrdict_to_dict(toml_config)
+authenticator = stauth.Authenticate(
+    toml_config_dict['credentials'],
+    toml_config_dict['cookie']['name'],
+    toml_config_dict['cookie']['key'],
+    toml_config_dict['cookie']['expiry_days'],
+    toml_config_dict['preauthorized']
+)
+name, authentication_status, username = authenticator.login('Login', 'main')
+import copy
+
+toml_config = copy.deepcopy(st.secrets.auth)
+authenticator = stauth.Authenticate(
+    toml_config.credentials,
+    toml_config.cookie.name,
+    toml_config.cookie.key,
+    toml_config.cookie.expiry_days,
+    toml_config.preauthorized
+)
 
 SCOPES = [
     'https://www.googleapis.com/auth/drive.file',
@@ -80,3 +125,5 @@ def clean_conda_requirements(input_file, output_file):
                 file.write(cleaned_line + "\n")
 
 clean_conda_requirements("converted-conda-requirements.txt", "cleaned-converted-conda-requirements.txt")
+
+

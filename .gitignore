@@ -19,6 +19,7 @@ poc-knowledge-graph-venv/include/
 poc-knowledge-graph-venv/share/
 
 *.toml
+*.yaml
 *.graphml
 # Compiled Java class files
 *.class

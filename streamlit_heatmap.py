@@ -1,10 +1,7 @@
 import logging
+import streamlit_authenticator as stauth
+import re
 from pathlib import Path
-
-# # log_file_path = Path("data/function_timings.log")
-# log_file_path = Path.cwd() / "data" / "function_timings.log"
-# # os.makedirs(log_file_path.parent, exist_ok=True)
-# log_file_path.parent.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     # filename=log_file_path,
@@ -31,6 +28,14 @@ from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 
 # import SL_Access.gsheets as gs
+def attrdict_to_dict(attrdict):
+    dict_ = {}
+    for key, value in attrdict.items():
+        if isinstance(value, attrdict.__class__):
+            dict_[key] = attrdict_to_dict(value)
+        else:
+            dict_[key] = value
+    return dict_
 
 SCOPES = [
     'https://www.googleapis.com/auth/drive.file',
@@ -248,126 +253,153 @@ def create_heatmap(irfs, show_tm_station_markers, show_pv_source_clusters, end_p
     hm.add_to(m)
     return m
 
+toml_config = st.secrets["auth"]
+toml_config_dict = attrdict_to_dict(toml_config)
+authenticator = stauth.Authenticate(
+    toml_config_dict['credentials'],
+    toml_config_dict['cookie']['name'],
+    toml_config_dict['cookie']['key'],
+    toml_config_dict['cookie']['expiry_days'],
+    toml_config_dict['preauthorized']
+)
+name, authentication_status, username = authenticator.login('Login', 'main')
+if authentication_status:
+    authenticator.logout('Logout', 'main')
+    st.write(f'Welcome *{name}*')
+    help_expander = st.expander('Need help?', expanded=False)
+    with help_expander:
+        st.markdown("""
+        1. **Select Country**: Use the dropdown menu to select a country.
+        2. **Date Range**: Choose a start date and an end date for your data.
+        3. **TM Station Markers**: Tick the checkbox if you want to display the transit monitoring station markers on the map.
+        4. **PV Source Clusters**: Tick the checkbox if you want to display the potential victim source clusters.
+        5. **Endpoint**: Select the endpoint of the route.
+        6. After setting your preferences, the heatmap will be automatically generated.
+        """)
 
-# dc = DB_Conn()
-dbc = DB_Conn()
-pd.set_option("chained_assignment", None)
-# Set up Streamlit app
-st.title("Route Heatmap App")
+    # dc = DB_Conn()
+    dbc = DB_Conn()
+    pd.set_option("chained_assignment", None)
+    # Set up Streamlit app
+    st.title("Route Heatmap App")
 
-# Get user input
-country_options = [
-    "Bangladesh",
-    "Ghana",
-    "India",
-    "India Network",
-    "Kenya",
-    "Malawi",
-    "Mozambique",
-    "Namibia",
-    "Nepal",
-    "Rwanda",
-    "Tanzania",
-    "Uganda",
-    "West_Africa",
-    "Zimbabwe",
-]
-country = st.selectbox(
-    "Select country:", options=country_options, key="country", help="Select country"
-)
-start_date = st.date_input(
-    "Start date:",
-    key="start_date",
-    value=date(2019, 1, 1),
-    min_value=date(2019, 1, 1),
-    max_value=date(2023, 12, 31),
-    help="Select a start date",
-)
-end_date = st.date_input(
-    "End date:",
-    key="end_date",
-    value=date(2020, 1, 1),
-    min_value=date(2019, 1, 1),
-    max_value=date(2023, 12, 31),
-    help="Select an end date",
-)
-show_transit_montoring_station_markers = st.checkbox(
-    "Show TM Station markers",
-    value=True,
-    key="show_transit_montoring_station_markers",
-    help="Show TM Station markers",
-)
-show_potential_victim_source_clusters = st.checkbox(
-    "Show PV source clusters",
-    value=True,
-    key="show_potential_victim_source_clusters",
-    help="Show PV source clusters",
-)
-end_point_options = ["transit_montoring_station", "destination"]
-end_point = st.selectbox(
-    "Select end point:",
-    options=end_point_options,
-    key="end_point",
-    help="Select end point",
-)
-
-irfs = get_data()
-if irfs is None:
-    st.stop()
-
-st.write("Retrieved {} data points".format(len(irfs)))
-end_lat = "tm_lat"
-end_long = "tm_long"
-if st.session_state.end_point == "destination":
-    workbook = dbc.client.open_by_url(
-        "https://docs.google.com/spreadsheets/d/16uwSfc9Ptf6PeytjF0jvzljE15eqSq6r3FKdKiWjn08/edit#gid=0"
+    # Get user input
+    country_options = [
+        "Bangladesh",
+        "Ghana",
+        "India",
+        "India Network",
+        "Kenya",
+        "Malawi",
+        "Mozambique",
+        "Namibia",
+        "Nepal",
+        "Rwanda",
+        "Tanzania",
+        "Uganda",
+        "West_Africa",
+        "Zimbabwe",
+    ]
+    country = st.selectbox(
+        "Select country:", options=country_options, key="country", help="Select country"
     )
-    all_geo = GSheet(workbook.worksheet("Sheet1")).df
-    irfs = pd.merge(
-        irfs, all_geo, how="left", left_on="destination", right_on="Location"
+    start_date = st.date_input(
+        "Start date:",
+        key="start_date",
+        value=date(2019, 1, 1),
+        min_value=date(2019, 1, 1),
+        max_value=date(2023, 12, 31),
+        help="Select a start date",
+    )
+    end_date = st.date_input(
+        "End date:",
+        key="end_date",
+        value=date(2020, 1, 1),
+        min_value=date(2019, 1, 1),
+        max_value=date(2023, 12, 31),
+        help="Select an end date",
+    )
+    show_transit_montoring_station_markers = st.checkbox(
+        "Show TM Station markers",
+        value=True,
+        key="show_transit_montoring_station_markers",
+        help="Show TM Station markers",
+    )
+    show_potential_victim_source_clusters = st.checkbox(
+        "Show PV source clusters",
+        value=True,
+        key="show_potential_victim_source_clusters",
+        help="Show PV source clusters",
+    )
+    end_point_options = ["transit_montoring_station", "destination"]
+    end_point = st.selectbox(
+        "Select end point:",
+        options=end_point_options,
+        key="end_point",
+        help="Select end point",
     )
 
-    irfs[["Lat", "Long"]] = irfs[["Lat", "Long"]].fillna(value=np.nan)
-    irfs.loc[~irfs.Lat.isna(), "Lat"] = irfs.loc[~irfs.Lat.isna(), "Lat"].astype(float)
-    irfs.loc[~irfs.Long.isna(), "Long"] = irfs.loc[~irfs.Long.isna(), "Long"].astype(
-        float
+    irfs = get_data()
+    if irfs is None:
+        st.stop()
+
+    st.write("Retrieved {} data points".format(len(irfs)))
+    end_lat = "tm_lat"
+    end_long = "tm_long"
+    if st.session_state.end_point == "destination":
+        workbook = dbc.client.open_by_url(
+            "https://docs.google.com/spreadsheets/d/16uwSfc9Ptf6PeytjF0jvzljE15eqSq6r3FKdKiWjn08/edit#gid=0"
+        )
+        all_geo = GSheet(workbook.worksheet("Sheet1")).df
+        irfs = pd.merge(
+            irfs, all_geo, how="left", left_on="destination", right_on="Location"
+        )
+
+        irfs[["Lat", "Long"]] = irfs[["Lat", "Long"]].fillna(value=np.nan)
+        irfs.loc[~irfs.Lat.isna(), "Lat"] = irfs.loc[~irfs.Lat.isna(), "Lat"].astype(float)
+        irfs.loc[~irfs.Long.isna(), "Long"] = irfs.loc[~irfs.Long.isna(), "Long"].astype(
+            float
+        )
+
+        geo_filter = make_geo_filter(irfs.Lat, irfs.Long, irfs.tm_lat, irfs.tm_long)
+        irfs = irfs[geo_filter]
+        irfs = irfs[~irfs[end_lat].isna()].reset_index(drop=True)
+
+    if country == "India Network":
+        pickle_file = "India_Roads.p"
+    else:
+        pickle_file = country + "_Roads.p"
+
+    road_graphs = download_and_load_pickle(pickle_file)
+
+    if len(irfs) > 1000:
+        min_seg_count = np.ceil(np.log10(len(irfs)) ** 2)
+    elif len(irfs) > 500:
+        min_seg_count = np.ceil(np.log10(len(irfs)))
+    else:
+        min_seg_count = 1
+
+    route_heatmap = hr.get_route_heatmap(
+        irfs,
+        road_graphs,
+        "irf_number",
+        dest_lat=end_lat,
+        dest_long=end_long,
+        min_seg_count=min_seg_count,
     )
+    # irfs.head(5).to_csv(Path('data/irfs.csv'))
+    if st.session_state.show_transit_montoring_station_markers:
+        route_heatmap = add_tm_stations(route_heatmap, irfs, lat="tm_lat", long="tm_long")
+    # if st.session_state.show_potential_victim_source_clusters:
+    #     # irfs.to_csv(Path("data/irfs.csv"))
+    #     # route_heatmap = add_source_clusters(route_heatmap, irfs)
+    # st.write('Route heatmap:')
 
-    geo_filter = make_geo_filter(irfs.Lat, irfs.Long, irfs.tm_lat, irfs.tm_long)
-    irfs = irfs[geo_filter]
-    irfs = irfs[~irfs[end_lat].isna()].reset_index(drop=True)
+    # st_data = st_folium(route_heatmap, width=725)
 
-if country == "India Network":
-    pickle_file = "India_Roads.p"
-else:
-    pickle_file = country + "_Roads.p"
-
-road_graphs = download_and_load_pickle(pickle_file)
-
-if len(irfs) > 1000:
-    min_seg_count = np.ceil(np.log10(len(irfs)) ** 2)
-elif len(irfs) > 500:
-    min_seg_count = np.ceil(np.log10(len(irfs)))
-else:
-    min_seg_count = 1
-
-route_heatmap = hr.get_route_heatmap(
-    irfs,
-    road_graphs,
-    "irf_number",
-    dest_lat=end_lat,
-    dest_long=end_long,
-    min_seg_count=min_seg_count,
-)
-# irfs.head(5).to_csv(Path('data/irfs.csv'))
-if st.session_state.show_transit_montoring_station_markers:
-    route_heatmap = add_tm_stations(route_heatmap, irfs, lat="tm_lat", long="tm_long")
-# if st.session_state.show_potential_victim_source_clusters:
-#     # irfs.to_csv(Path("data/irfs.csv"))
-#     # route_heatmap = add_source_clusters(route_heatmap, irfs)
-# st.write('Route heatmap:')
-
-# st_data = st_folium(route_heatmap, width=725)
-
-folium_static(route_heatmap, width=725)
-# route_heatmap
+    folium_static(route_heatmap, width=725)
+    # route_heatmap
+elif authentication_status == False:
+    st.error('Username/password is incorrect')
+elif authentication_status == None:
+    st.warning('Please enter your username and password')
