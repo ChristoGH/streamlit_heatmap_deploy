@@ -46,3 +46,37 @@ def download_and_load_pickle(service, file_name):
 # Assuming `service` is your Google Drive API service client
 file_name = 'SA_roads.p'  # Name of the file you want to download from Google Drive
 road_graphs = download_and_load_pickle(service, file_name)
+
+def convert_conda_to_pip_syntax(input_file, output_file):
+    with open(input_file, "r") as file:
+        lines = file.readlines()
+
+    with open(output_file, "w") as file:
+        for line in lines:
+            if "=" in line:
+                package = line.replace("=", "==", 1)
+                file.write(package)
+
+convert_conda_to_pip_syntax("conda-requirements.txt", "converted-conda-requirements.txt")
+def clean_conda_requirements(input_file, output_file):
+    with open(input_file, "r") as file:
+        lines = file.readlines()
+
+    with open(output_file, "w") as file:
+        for line in lines:
+            if "=" in line:
+                # Skip the 'python' entry
+                if line.lower().startswith("python="):
+                    continue
+                # Keep only package name and version
+                package = line.split("=")[0:2]
+                # Rejoin package name and version
+                cleaned_line = "=".join(package)
+                # Remove any suffix like '=pypi_0'
+                cleaned_line = cleaned_line.split("_")[0]
+                # Write to file only if it has both package name and version
+                if cleaned_line.count('=') == 1 and cleaned_line.endswith('='):
+                    continue
+                file.write(cleaned_line + "\n")
+
+clean_conda_requirements("converted-conda-requirements.txt", "cleaned-converted-conda-requirements.txt")
