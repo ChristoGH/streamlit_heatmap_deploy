@@ -19,7 +19,6 @@ import psycopg2
 import random
 from datetime import date
 from oauth2client.service_account import ServiceAccountCredentials
-# import gpt_heat_routes as hr
 import Route_Heatmap.gpt_heat_routes as hr
 import io
 import pickle

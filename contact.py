@@ -14,7 +14,7 @@ def attrdict_to_dict(attrdict):
             dict_[key] = value
     return dict_
 # Step 1: Set up authentication
-hashed_passwords = stauth.Hasher(['john@lovejustice.ngo']).generate()
+
 
 import yaml
 from yaml.loader import SafeLoader
