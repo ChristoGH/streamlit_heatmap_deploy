@@ -262,7 +262,7 @@ authenticator = stauth.Authenticate(
     toml_config_dict['cookie']['expiry_days'],
     toml_config_dict['preauthorized']
 )
-name, authentication_status, username = authenticator.login('Login', 'main')
+name, authentication_status, username = authenticator.login()
 if authentication_status:
     authenticator.logout('Logout', 'main')
     st.write(f'Welcome *{name}*')
@@ -378,8 +378,8 @@ if authentication_status:
         min_seg_count = np.ceil(np.log10(len(irfs)))
     else:
         min_seg_count = 1
-
-    route_heatmap = hr.get_route_heatmap(
+    st.data_editor(irfs)
+    route_heatmap, segmented_routes = hr.get_route_heatmap(
         irfs,
         road_graphs,
         "irf_number",
@@ -387,6 +387,7 @@ if authentication_status:
         dest_long=end_long,
         min_seg_count=min_seg_count,
     )
+    st.data_editor(segmented_routes)
     # irfs.head(5).to_csv(Path('data/irfs.csv'))
     if st.session_state.show_transit_montoring_station_markers:
         route_heatmap = add_tm_stations(route_heatmap, irfs, lat="tm_lat", long="tm_long")

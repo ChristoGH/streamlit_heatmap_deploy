@@ -254,6 +254,121 @@ def create_heatmap(irfs, show_tm_station_markers, show_pv_source_clusters, end_p
     hm.add_to(m)
     return m
 
+
+def combine_country_data(countries, start_date, end_date):
+    """
+    Retrieves and combines data for multiple countries.
+
+    Args:
+        countries (list): List of country names
+        start_date (date): Start date for data retrieval
+        end_date (date): End date for data retrieval
+
+    Returns:
+        tuple: Combined IRFs dataframe and combined road graphs dictionary
+    """
+    combined_irfs = []
+    combined_road_graphs = {}
+
+    for country in countries:
+        # Temporarily set session state for get_data() to work
+        st.session_state.country = country
+        st.session_state.start_date = start_date
+        st.session_state.end_date = end_date
+
+        # Get data for current country
+        irfs = get_data()
+        if irfs is not None and not irfs.empty:
+            irfs['source_country'] = country  # Add country identifier
+            combined_irfs.append(irfs)
+
+            # Load road graphs for current country
+            pickle_file = "India_Roads.p" if country == "India Network" else f"{country}_Roads.p"
+            road_graphs = download_and_load_pickle(pickle_file)
+            if road_graphs is not None:
+                combined_road_graphs[country] = road_graphs
+
+    # Combine all dataframes
+    if combined_irfs:
+        final_irfs = pd.concat(combined_irfs, ignore_index=True)
+        return final_irfs, combined_road_graphs
+    return None, None
+
+
+def create_multi_country_heatmap(irfs_dict, road_graphs_dict, show_tm_stations=True):
+    """
+    Creates a combined heatmap for multiple countries.
+
+    Args:
+        irfs_dict: Dictionary of country:irfs dataframes
+        road_graphs_dict: Dictionary of country:road_graphs
+        show_tm_stations (bool): Whether to show TM stations
+
+    Returns:
+        folium.Map: Combined heatmap
+    """
+    # Initialize lists to store bounds for centering the map
+    all_lats = []
+    all_longs = []
+    combined_heatmap = None
+
+    for country, irfs in irfs_dict.items():
+        if irfs is None or irfs.empty:
+            continue
+
+        # Calculate min_seg_count based on data volume
+        if len(irfs) > 1000:
+            min_seg_count = np.ceil(np.log10(len(irfs)) ** 2)
+        elif len(irfs) > 500:
+            min_seg_count = np.ceil(np.log10(len(irfs)))
+        else:
+            min_seg_count = 1
+
+        # Get road graphs for current country
+        road_graphs = road_graphs_dict.get(country)
+        if road_graphs is None:
+            continue
+
+        # Generate heatmap for current country
+        country_heatmap = hr.get_route_heatmap(
+            irfs,
+            road_graphs,
+            "irf_number",
+            dest_lat="tm_lat",
+            dest_long="tm_long",
+            min_seg_count=min_seg_count
+        )
+
+        # For first country, initialize the combined map
+        if combined_heatmap is None:
+            combined_heatmap = country_heatmap
+        else:
+            # Transfer all layers from country_heatmap to combined_heatmap
+            for layer in country_heatmap.children.values():
+                layer.add_to(combined_heatmap)
+
+        # Collect coordinates for map centering
+        all_lats.extend(irfs['tm_lat'].dropna())
+        all_longs.extend(irfs['tm_long'].dropna())
+
+        # Add TM stations if requested
+        if show_tm_stations:
+            combined_heatmap = add_tm_stations(combined_heatmap, irfs)
+
+    if combined_heatmap is not None:
+        # Center map on all data points
+        center_lat = np.mean(all_lats)
+        center_long = np.mean(all_longs)
+        combined_heatmap.location = [center_lat, center_long]
+
+        # Adjust zoom level based on data spread
+        lat_spread = max(all_lats) - min(all_lats)
+        long_spread = max(all_longs) - min(all_longs)
+        zoom_level = int(4 / max(lat_spread, long_spread))
+        combined_heatmap.zoom_start = max(min(zoom_level, 8), 2)  # Constrain between 2 and 8
+
+    return combined_heatmap
+
 toml_config = st.secrets["auth"]
 toml_config_dict = attrdict_to_dict(toml_config)
 authenticator = stauth.Authenticate(
@@ -339,67 +454,85 @@ if authentication_status:
         key="end_point",
         help="Select end point",
     )
-
-    irfs = get_data()
-    if irfs is None:
-        st.stop()
-
-    st.write("Retrieved {} data points".format(len(irfs)))
-    end_lat = "tm_lat"
-    end_long = "tm_long"
-    if st.session_state.end_point == "destination":
-        workbook = dbc.client.open_by_url(
-            "https://docs.google.com/spreadsheets/d/16uwSfc9Ptf6PeytjF0jvzljE15eqSq6r3FKdKiWjn08/edit#gid=0"
-        )
-        all_geo = GSheet(workbook.worksheet("Sheet1")).df
-        irfs = pd.merge(
-            irfs, all_geo, how="left", left_on="destination", right_on="Location"
-        )
-
-        irfs[["Lat", "Long"]] = irfs[["Lat", "Long"]].fillna(value=np.nan)
-        irfs.loc[~irfs.Lat.isna(), "Lat"] = irfs.loc[~irfs.Lat.isna(), "Lat"].astype(float)
-        irfs.loc[~irfs.Long.isna(), "Long"] = irfs.loc[~irfs.Long.isna(), "Long"].astype(
-            float
-        )
-
-        geo_filter = make_geo_filter(irfs.Lat, irfs.Long, irfs.tm_lat, irfs.tm_long)
-        irfs = irfs[geo_filter]
-        irfs = irfs[~irfs[end_lat].isna()].reset_index(drop=True)
-
-    if country == "India Network":
-        pickle_file = "India_Roads.p"
+    all_countries = st.checkbox("Select all countries", value=False)
+    if all_countries:
+        selected_countries = country_options
     else:
-        pickle_file = country + "_Roads.p"
+        country = st.selectbox("Select country:", options=country_options, key="country")
+        selected_countries = [country]
 
-    road_graphs = download_and_load_pickle(pickle_file)
-
-    if len(irfs) > 1000:
-        min_seg_count = np.ceil(np.log10(len(irfs)) ** 2)
-    elif len(irfs) > 500:
-        min_seg_count = np.ceil(np.log10(len(irfs)))
+    # Replace the existing heatmap generation code with:
+    if all_countries:
+        irfs, road_graphs = combine_country_data(selected_countries, start_date, end_date)
+        if irfs is not None:
+            st.write(f"Retrieved {len(irfs)} data points across {len(selected_countries)} countries")
+            route_heatmap = create_multi_country_heatmap(
+                irfs,
+                road_graphs,
+                show_tm_stations=show_transit_montoring_station_markers
+            )
     else:
-        min_seg_count = 1
+        # Keep your existing single-country code here
+        irfs = get_data()
+        if irfs is not None:
 
-    route_heatmap = hr.get_route_heatmap(
-        irfs,
-        road_graphs,
-        "irf_number",
-        dest_lat=end_lat,
-        dest_long=end_long,
-        min_seg_count=min_seg_count,
-    )
-    # irfs.head(5).to_csv(Path('data/irfs.csv'))
-    if st.session_state.show_transit_montoring_station_markers:
-        route_heatmap = add_tm_stations(route_heatmap, irfs, lat="tm_lat", long="tm_long")
-    # if st.session_state.show_potential_victim_source_clusters:
-    #     # irfs.to_csv(Path("data/irfs.csv"))
-    #     # route_heatmap = add_source_clusters(route_heatmap, irfs)
-    # st.write('Route heatmap:')
 
-    # st_data = st_folium(route_heatmap, width=725)
+            st.write("Retrieved {} data points".format(len(irfs)))
+            end_lat = "tm_lat"
+            end_long = "tm_long"
+            if st.session_state.end_point == "destination":
+                workbook = dbc.client.open_by_url(
+                    "https://docs.google.com/spreadsheets/d/16uwSfc9Ptf6PeytjF0jvzljE15eqSq6r3FKdKiWjn08/edit#gid=0"
+                )
+                all_geo = GSheet(workbook.worksheet("Sheet1")).df
+                irfs = pd.merge(
+                    irfs, all_geo, how="left", left_on="destination", right_on="Location"
+                )
 
-    folium_static(route_heatmap, width=725)
-    # route_heatmap
+                irfs[["Lat", "Long"]] = irfs[["Lat", "Long"]].fillna(value=np.nan)
+                irfs.loc[~irfs.Lat.isna(), "Lat"] = irfs.loc[~irfs.Lat.isna(), "Lat"].astype(float)
+                irfs.loc[~irfs.Long.isna(), "Long"] = irfs.loc[~irfs.Long.isna(), "Long"].astype(
+                    float
+                )
+
+                geo_filter = make_geo_filter(irfs.Lat, irfs.Long, irfs.tm_lat, irfs.tm_long)
+                irfs = irfs[geo_filter]
+                irfs = irfs[~irfs[end_lat].isna()].reset_index(drop=True)
+
+            if country == "India Network":
+                pickle_file = "India_Roads.p"
+            else:
+                pickle_file = country + "_Roads.p"
+
+            road_graphs = download_and_load_pickle(pickle_file)
+
+            if len(irfs) > 1000:
+                min_seg_count = np.ceil(np.log10(len(irfs)) ** 2)
+            elif len(irfs) > 500:
+                min_seg_count = np.ceil(np.log10(len(irfs)))
+            else:
+                min_seg_count = 1
+
+            route_heatmap = hr.get_route_heatmap(
+                irfs,
+                road_graphs,
+                "irf_number",
+                dest_lat=end_lat,
+                dest_long=end_long,
+                min_seg_count=min_seg_count,
+            )
+            # irfs.head(5).to_csv(Path('data/irfs.csv'))
+            if st.session_state.show_transit_montoring_station_markers:
+                route_heatmap = add_tm_stations(route_heatmap, irfs, lat="tm_lat", long="tm_long")
+            # if st.session_state.show_potential_victim_source_clusters:
+            #     # irfs.to_csv(Path("data/irfs.csv"))
+            #     # route_heatmap = add_source_clusters(route_heatmap, irfs)
+            # st.write('Route heatmap:')
+
+            # st_data = st_folium(route_heatmap, width=725)
+
+            folium_static(route_heatmap, width=725)
+            # route_heatmap
 elif authentication_status == False:
     st.error('Username/password is incorrect')
 elif authentication_status == None:

@@ -5,6 +5,8 @@ import streamlit as st
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 import streamlit_authenticator as stauth
+
+hashed_passwords = stauth.Hasher(['your_password']).generate()
 def attrdict_to_dict(attrdict):
     dict_ = {}
     for key, value in attrdict.items():
@@ -126,4 +128,8 @@ def clean_conda_requirements(input_file, output_file):
 
 clean_conda_requirements("converted-conda-requirements.txt", "cleaned-converted-conda-requirements.txt")
 
+password="$2b$12$/Tbx4hrkmfSqwnSS6hwYUu7NS06k4goxMzzJqQou/cGPL8mnkDAMa"
+            [auth.credentials.usernames.julius]
+                email="julius@lovejustice.ngo"
+                name="Julius-Lutalo Kiyingi"
 
